@@ -1,4 +1,4 @@
-#include "stdAfx.h"
+//#include "stdAfx.h"
 #include <iostream>
 #include <string>
 #include<map>
@@ -1793,6 +1793,7 @@ int main(int argc,char *argv[]){
 	clock_t end = clock();
 	double duration = ( end - start ) / (double) CLOCKS_PER_SEC;
 	ofstream finalout(("./table_" + fapp + ".txt").c_str());
+	cout<<"Num_processes"<<'\t'<< "max_states" <<'\t'<<"mdp_size"<<'\t'<<"mealy_machine_size"<<'\t'<<"value"<<'\t'<<"duration"<<endl;
 	cout<<NF<<'\t'<< tNF*2 <<'\t'<<mdpsize<<'\t'<<msize<<'\t'<<x<<'\t'<<duration<<endl;
 	finalout<<NF<<'\t'<< tNF*2 <<'\t'<<mdpsize<<'\t'<<msize<<'\t'<<x<<'\t'<<duration<<endl;
 	finalout.close();

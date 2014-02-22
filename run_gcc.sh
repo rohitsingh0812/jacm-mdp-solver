@@ -36,9 +36,13 @@ fldr=${NF}_${MDPTYPE}
 mkdir -p $fldr
 
 ./runner > ./$fldr/output.txt
+#if NF is less than or equal to 5
 
-cd $fldr
-for i in `ls strategy*.dot | sed 's/.dot//g'`; 
-do
-	dot -Tpng $i.dot > $i.png
-done
+if [ "$NF" -lt "6"];
+then
+	cd $fldr
+	for i in `ls strategy*.dot | sed 's/.dot//g'`; 
+	do
+		dot -Tpng $i.dot > $i.png
+	done
+fi

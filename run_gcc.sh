@@ -38,7 +38,7 @@ mkdir -p $fldr
 ./runner > ./$fldr/output.txt
 #if NF is less than or equal to 5
 
-if [ "$NF" -lt "6"];
+if [ "$NF" -lt "6" ];
 then
 	cd $fldr
 	for i in `ls strategy*.dot | sed 's/.dot//g'`; 

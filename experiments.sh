@@ -13,7 +13,7 @@ up=$2
 pall=0.25 #probability of a process being hungry (same for all)
 
 #the sequential probabilities start from 0.05 and add 0.07 for each next one
-parr=( 0.05 0.12 0.19 0.26 0.33 0.40 0.47 0.54 0.61 0.68 )
+parr=( 0.05 0.12 0.19 0.26 0.33 0.40 0.47 0.54 0.61 0.68 0.75 0.82 0.89 0.96 )
 for i in `seq $low $up`;
 do
     bash run_gcc.sh $i 1 $pall

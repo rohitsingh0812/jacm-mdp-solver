@@ -10,16 +10,21 @@ pall="0.05"
 if [ "$MDPTYPE" = "1" ];
 then
 	pall=$3 #double value like 0.05
+	echo "$NF $MDPTYPE $pall"
 	echo "double pall = $pall; //MDPTYPE 1
 double pdiff[NF];" >> ./temp.h
 else
 	echo -n "double pall = $pall; //MDPTYPE 1
 double pdiff[NF] = {" >> ./temp.h
 
+	echo -n "$NF $MDPTYPE "
+	
 	for i in ${@:3} #${@:2} is the same array less the first element.
 	do
 		echo -n $i"," >> ./temp.h
+		echo -n $i" "
 	done
+	echo ""
 	echo -n "}; //MDPTYPE 2
 " >> ./temp.h
 

@@ -1354,18 +1354,21 @@ class MDP {
 		}
 		
 		if(improved == 0){
-			ulli tots = 1;
+			double tots = 0;
 			f(i,states.size()){
 				//if(states[i]->actions.size() ==1) continue;
 				//int x = rand()%(states[i]->actions.size() -1);
 				//if(x == states[i]->chosen) states[i]->chosen = states[i]->actions.size() -1;
 				//else 
 				states[i]->chosen = rand()%(states[i]->actions.size());
-				tots *= states[i]->actions.size();
+
+				Assert((states[i]->actions.size()!= 0),"Actions cannot be empty");
+				
+				tots = tots + log2(states[i]->actions.size());
 				Assert(states[i]->actions.size() == 1 || states[i]->actions.size() <= tNF, "Action size constraint violated!");	
 			}
 			//cout<<"No fake improvement possible..."<<endl;
-			cout<<"Total Number of Strategies Possible: " <<tots<<endl;
+			cout<<"Total Number of Strategies Possible: 2^" <<tots<<endl;
 		}
 		else cout<<"fake improvement done..."<<endl;
 		//testCycles();

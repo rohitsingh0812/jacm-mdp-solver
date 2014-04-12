@@ -1,7 +1,7 @@
-#define NF 2
+#define NF 5
 double pall = 0.1; //MDPTYPE 1
-int rewards[NF] = {2,1};
-int steps[NF] = {1,2};
+int rewards[NF] = {5,4,3,2,1};
+int steps[NF] = {1,2,3,4,5};
 
 class sysvars{
 public:

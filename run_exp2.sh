@@ -36,11 +36,13 @@ cat temp.h | sed 's/,}/}/g' > inputs.h
 
 g++ -o runner MDPex2.cpp
 
-fldr=${NF}_${MDPTYPE}
+DN="e2_${NF}_${MDPTYPE}"
 
-mkdir -p $fldr
+mkdir -p $DN
 
-./runner > ./$fldr/output.txt
+./runner > ./$DN/output.txt
 #if NF is less than or equal to 5
+
+cat ./$DN/output.txt | tail -n 1 >> tables2_$MDPTYPE.txt
 
 

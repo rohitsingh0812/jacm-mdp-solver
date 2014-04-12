@@ -36,12 +36,13 @@ double pdiff[2] = {0.05,0.12}; //MDPTYPE 2
 
 mv inputs3_temp.h inputs3.h
 
-mkdir -p $NF
+DN="e3_$NF" 
+mkdir -p $DN
 
 g++ -o p3 MDPex3.cpp
 
-./p3 > ./$NF/output.txt
+./p3 > ./$DN/output.txt
 
-cat ./$NF/output.txt | grep -1 "Num_" | tail -n 1
+cat ./$DN/output.txt | tail -n 1 >> tables3.txt
 
 

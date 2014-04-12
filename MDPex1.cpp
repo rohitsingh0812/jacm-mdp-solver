@@ -5,7 +5,7 @@
 #include <vector>
 #include <stack>
 #include <algorithm>
-#include <fstream>//rr
+#include <fstream>
 #include <cstdlib>
 #include <cstdio>
 #include <ctime>
@@ -16,15 +16,13 @@
 #include<cmath>
 #include <cassert>
 #include "sparselib.h"
-#include "inputs.h"
-#define WEIGHTED_REWARDS true
-
-
+#include "inputs1.h"
+#define WAIT 1
 
 #define EXTRA 0
 #define DFLAG true
 #define pl() if(DFLAG) cout<<__LINE__<<endl
-int BIGC = NF;//(WEIGHTED_REWARDS)? NF*NF:NF;
+int BIGC = (WEIGHTED_REWARDS)? NF*NF:NF;
 
 using namespace ::sparselib_load ;
 using           ::sparselib::index_type ;
@@ -42,7 +40,6 @@ int gitr2 = 12000;
 void Assert(bool b,string msg){
 	if(!b){
 		cout<<"Error :" <<msg<<endl;
-		exit(1);
 	}
 }
 #define f(i,n) for(unsigned int i=0;i< (unsigned int)n;i++)
@@ -52,8 +49,6 @@ void Assert(bool b,string msg){
 
 ulli tNF = (ulli) pow(2.0,NF);
 map<int, vector <bool> > eimap;
-map<int, vector <bool> > simap;
-
 map<int, double> p1probmap;
 map<int, double> p2probmap;
 
@@ -122,19 +117,29 @@ class action {
 class statevars1{
     public:
 	bool type;//0 for environment and 1 for player
-    bool req[NF];//hungryness of each process
-	
+    bool req[NF];
+	int phasectr;//varies from 0-3, values 0,1 correspond to phase 1 (ground likely) & 2-3 correspond to phase 2 (top floor likely)
+    int currFloor;
 	statevars1(){
 		statevars1(false);
 	}
 	statevars1(bool t){
 		f(i,NF)	req[i] = false;
+		currFloor = 0;
+		phasectr=0;
 		type = t;
 	}
-	int getwt(){//These are rewards! Not costs! The rewards are maximized
+	int getwt(int c){//These are rewards! Not costs! The rewards are maximized
+		if(!WEIGHTED_REWARDS){
 			int cnt =0;
 			f(i,NF) if(req[i]) cnt++;
-			return (BIGC - cnt);
+			return WAIT*(BIGC - cnt);
+		}
+		else{
+			int sum =0;
+			f(i,NF) if(req[i]) sum+=abs((int)(i-c));
+			return WAIT*(BIGC - sum);
+		}
 	}
 	void setreq(int i){
 		if(eimap.find(i) == eimap.end()){
@@ -151,26 +156,13 @@ class statevars1{
 				req[j] = eimap[i][j];
 		}
 	}
-	void setreqp(int i){
-		if(simap.find(i) == simap.end()){
-			Assert(false,"simap must have been initialized by now");
-			f(j,NF){
-				 if ( i & 1 << j ) //jth bit of i is 1
-					 req[j] = true;
-				 else
-					 req[j] =false;
-			}
-		}
-		else{
-			f(j,NF)
-				req[j] = simap[i][j];
-		}
-	}
 	void setVals(statevars1 &s){
         f(i,NF){
             req[i] = s.req[i];
         }
-    	type = s.type;
+        currFloor = s.currFloor;
+		type = s.type;
+		phasectr = s.phasectr;
 	}
 	string str(){
         stringstream ss;
@@ -180,6 +172,7 @@ class statevars1{
 		f(i,NF){
 			ss<<"r_"<<i<<"="<<(req[i]?1:0)<<", ";
         }
+		ss<<"c="<<currFloor<<",ph="<<phasectr<<")";
 		return ss.str();
 	}
 	string idstr(){
@@ -188,14 +181,24 @@ class statevars1{
 		else ss<<'e';
 		f(i,NF){
 			ss<<(req[i]?1:0);
-        }	
+        }
+		ss<<"/"<<currFloor<<"|"<<phasectr;
+		
 		return ss.str();
+	}
+	void pi(){
+		phasectr = (phasectr+1)%4;
 	}
 	string reqstr(){
         stringstream ss;
 		f(i,NF){
 			ss<<(req[i]?1:0);
         }
+		return ss.str();
+	}
+	string cfstr(){
+        stringstream ss;
+		ss<<currFloor;
 		return ss.str();
 	}
 	int num1s(){
@@ -226,13 +229,17 @@ class statevars1{
 				 }
 				 if ( i & p2k ){ //kth bit of i is 1
 					 v.push_back(true);
-					 prob1 *= pall;
-					 prob2 *= pdiff[j];
+					 if(j==0) prob1 *= 0.05;
+					 else prob1 *= 0.01;
+					 if(j==NF-1) prob2 *= 0.05;
+					 else prob2 *= 0.01;
 				 }
 				 else{
 					 v.push_back(false);
-					 prob1 *= (1.0-pall);
-					 prob2 *= (1.0-pdiff[j]);
+					 if(j==0) prob1 *= 0.95;
+					 else prob1 *= 0.99;
+					 if(j==NF-1) prob2 *= 0.95;
+					 else prob2 *= 0.99;
 				 }
 				 p2k *=2;
 				 k++;
@@ -246,71 +253,7 @@ class statevars1{
 		Assert(abs(sumup1 -1.0) < EPSCHECK,"Total probability is not 1.0");
 		Assert(abs(sumup2 -1.0) < EPSCHECK,"Total probability is not 1.0");
 	}
-
-	void genSysInpMap(){
-		simap.clear();
-		
-		int n1s = num1s();
-		int p2n1s = (int)pow((double)2,(int)n1s);
-		f(i,p2n1s){
-			vector<bool> v;
-			int p2k =1;
-			int k=0;
-			f(j,NF){
-				 if(!req[j]){
-					 v.push_back(false);
-					 continue;
-				 }
-				 if ( i & p2k ){ //kth bit of i is 1
-					 v.push_back(false);
-				 }
-				 else{
-					 v.push_back(true);
-				 }
-				 p2k *=2;
-				 k++;
-			}
-			simap[i] =v;
-		}
-	}
 };
-
-bool nonConsecutive(bool from[NF], vector<bool> &to){
-	Assert(to.size() == NF, "to vector size mismatch");
-	//check that 0's in from remained 0's
-	set<int> chng;
-	f(i,NF){
-		if(!from[i]){ 
-			Assert(!to[i],"to[i] should be 0 if from[i] was 0");
-			continue;
-		}
-		else{
-			if(to[i]) continue;
-			else{
-				if(i==NF-1 && chng.find(0) != chng.end()) return false;
-				if(i>0 && chng.find(i-1) != chng.end()) return false;
-				chng.insert(i);
-			}
-		}
-	}
-	return true;
-}
-
-string strchange(statevars1 &from, statevars1 &to){
-	//find out how many hungry processes (req[i] = 1) in from were satisfied (req[i] = 0) in to
-	string s = "";
-	bool first = true;
-	f(i,NF){
-		//Assert(from.req[i] == to.req[i], "Seriously!");
-		if(from.req[i] && !to.req[i]){ 
-			if(!first) s += "|";
-			if(first) first = false;
-			s=s+toSTR(i);
-		}
-	}
-	if(first) return "NC";
-	return s;
-}
 
 class state{
 	public:
@@ -1206,7 +1149,7 @@ class MDP {
 					l = l.substr(1,l.length());
 					fout<<e->from<<" -> "<<e->to;
 					if(states[e->from]->sv.type)
-						fout<<"[label=\""<<strchange(states[e->from]->sv,states[e->to]->sv)<<"("<<e->wt<<")"<<"\"];"<<endl;
+						fout<<"[label=\""<<states[e->to]->sv.cfstr()<<"("<<e->wt<<")"<<"\"];"<<endl;
 					else
 						fout<<"[label=\""<<states[e->to]->sv.reqstr()<<"("<<e->prob<<")"<<"\"];"<<endl;
 				}
@@ -1240,9 +1183,9 @@ class MDP {
 					fout<<e->from<<" -> "<<e->to;
 					if(states[e->from]->sv.type){
 						if(j == states[i]->chosen)
-							fout<<"[color=red,label=\""<<strchange(states[e->from]->sv,states[e->to]->sv)<<"("<<e->wt<<")"<<"\"];"<<endl;
+							fout<<"[color=red,label=\""<<states[e->to]->sv.cfstr()<<"("<<e->wt<<")"<<"\"];"<<endl;
 						else
-							fout<<"[label=\""<<strchange(states[e->from]->sv,states[e->to]->sv)<<"("<<e->wt<<")"<<"\"];"<<endl;
+							fout<<"[label=\""<<states[e->to]->sv.cfstr()<<"("<<e->wt<<")"<<"\"];"<<endl;
 					}
 					else
 						fout<<"[label=\""<<states[e->to]->sv.reqstr()<<"("<<e->prob<<")"<<"\"];"<<endl;
@@ -1305,7 +1248,7 @@ class MDP {
 			f(k, states[i]->actions[j]->edges.size()){
 					edge * e = states[i]->actions[j]->edges[k];
 					if(states[e->from]->sv.type)
-						fout<<e->from<<" -> "<<e->to<<"[label=\""<<strchange(states[e->from]->sv,states[e->to]->sv)<<"("<<e->wt<<")"<<"\"];"<<endl;
+						fout<<e->from<<" -> "<<e->to<<"[label=\""<<states[e->to]->sv.currFloor<<"("<<e->wt<<")"<<"\"];"<<endl;
 					else
 						fout<<e->from<<" -> "<<e->to<<"[label=\""<<states[e->to]->sv.reqstr()<<"("<<e->prob<<")"<<"\"];"<<endl;
 			}
@@ -1354,21 +1297,18 @@ class MDP {
 		}
 		
 		if(improved == 0){
-			double tots = 0;
+			ulli tots=0;
 			f(i,states.size()){
 				//if(states[i]->actions.size() ==1) continue;
 				//int x = rand()%(states[i]->actions.size() -1);
 				//if(x == states[i]->chosen) states[i]->chosen = states[i]->actions.size() -1;
 				//else 
 				states[i]->chosen = rand()%(states[i]->actions.size());
-
-				Assert((states[i]->actions.size()!= 0),"Actions cannot be empty");
-				
-				tots = tots + log2(states[i]->actions.size());
-				Assert(states[i]->actions.size() == 1 || states[i]->actions.size() <= tNF, "Action size constraint violated!");	
+				Assert(states[i]->actions.size() == 1 || states[i]->actions.size() == NF, "Action size constraint violated!");
+				if(states[i]->actions.size() == NF) tots += 1 ;
 			}
 			//cout<<"No fake improvement possible..."<<endl;
-			cout<<"Total Number of Strategies Possible: 2^" <<tots<<endl;
+			cout<<"Total Number of Strategies Possible: "<<NF<<"^" <<tots<<endl;
 		}
 		else cout<<"fake improvement done..."<<endl;
 		//testCycles();
@@ -1486,7 +1426,7 @@ class MDP {
 		for(map<int,state*>::iterator it = states.begin();it != states.end();it++){
 			int i = it->first;
 			if(states[i]->sv.type){//player state
-				Assert(states[i]->actions.size() <= tNF, "Enough actions for Player States");
+				Assert(states[i]->actions.size() == NF, "Enough actions for Player States");
 			}
 			else{
 				Assert(states[i]->actions.size() == 1, "One action for Env States");
@@ -1533,7 +1473,6 @@ class MDP {
 				return (*it);
 		}
 		Assert(false,"No action for this edge!");
-		return NULL;
 	}
 	//removeEdge
 	void removeEdge(edge *e){
@@ -1619,17 +1558,17 @@ class MDP {
 					tbre.push_back(cs->actions[cs->chosen]->edges[0]);
 					int to = cs->actions[cs->chosen]->edges[0]->to;
 					Assert( find(states[to]->incoming.begin(),states[to]->incoming.end(),cs->actions[cs->chosen]->edges[0]) != states[to]->incoming.end(), "Edge not found in incoming field of the to state");
-					Assert(states[to]->sv.type == false, "to state not an Env State!");
+					
 					f(j,cs->incoming.size()){
 						int frm = cs->incoming[j]->from;
 						//tbre.push_back(cs->incoming[j]);
 						//tbra.push_back(findAction(cs->incoming[j]));
 						edge* e = cs->incoming[j];
-						e->label = states[e->to]->sv.reqstr() + "/" + strchange(cs->sv,states[to]->sv);
+						e->label = states[e->to]->sv.reqstr() + "/" + states[to]->sv.cfstr();
 						e->to = to;
 						
 						Assert(states[frm]->sv.type == false, "frm state not an Env State!");
-						
+						Assert(states[to]->sv.type == false, "to state not an Env State!");
 
 						states[to]->incoming.push_back(e);//remember to delete the P->E edge once out of the loop
 					}
@@ -1656,13 +1595,13 @@ class MDP {
 		return printDotFileStrat(fname);
 	}
 };
-void buildMDP(MDP &m, int probabs){
+void buildMDP1(MDP &m){
 	map<string,state*> seen;
 	//Build Start State *ss
 	//Use a Stack for DFS, put ss on the stack
 	//As long as stack is non-empty
 	//Take the top, 
-	//	1. If its an Env State: for each possible map entry in eimap, find the next state and check if its already in seen
+	//	1. If its an Env Stata: for each possible map entry in eimap, find the next state and check if its already in seen
 	//		Establish the action based on probab info from MC: 1 state, Weight = 0, Also implement the constraint that r_i will 
 	//		not become 0 unless c_i is reached and if currFloor is c then r_c should be 0.  
 	//	2. If its a player state: For each value of "CurrFloor" find next Env state and check if its already in seen establish all actions 
@@ -1683,6 +1622,7 @@ void buildMDP(MDP &m, int probabs){
 		cs->actions.push_back(tact);	
 		map<int, vector <bool> >::iterator it;
 		cs->sv.genEnvInpMap();
+		Assert(cs->sv.req[cs->sv.currFloor] == false, "Current Floor requests are always low");
 		Assert((int)pow(2.0,NF-cs->sv.num1s()) == eimap.size(), "Matching sizes 2^num0s");
 		//one should go for only minterms of those requests which are 0
 		for (it = eimap.begin(); it != eimap.end(); it++){
@@ -1691,6 +1631,93 @@ void buildMDP(MDP &m, int probabs){
 			
 			statevars1 svt(true);//player type state
 			svt.setreq(it->first);
+			svt.currFloor = cs->sv.currFloor;
+			string chkstr= "p"+svt.idstr();
+			state *ns;
+			bool cont=false;
+			if(seen.find(chkstr) == seen.end()){
+				//didn't find the state already
+				//create new state
+				ns = new state(cid,false,svt);
+				m.states[cid] =ns;
+				seen[chkstr] = ns;
+				cid++;
+			}
+			else{
+				//found the state already
+				ns = seen[chkstr];
+				cont =true;
+			}
+			cs->actions[0]->addEdge(cs->id,ns->id,p1probmap[it->first],0);//cs->sv.getwt() for the next edge
+			assert(cs->actions[0]==tact);
+			ns->incoming.push_back(cs->actions[0]->edges[it->first]);
+			if(cont) continue;
+			//now we have the next Player state
+			//Try to do all possible c-changes fixing the reqs 
+			f(c,NF){
+				statevars1 svt2(svt);
+				svt2.type = false;
+				svt2.currFloor = c;
+				int extrawt=0;
+				if(!svt2.req[c]) extrawt = 0;
+				else extrawt = EXTRA;
+				//we chose to go to floor c, shut down r_c then
+				svt2.req[c] = false;
+				//now svt is statevars1 for next next state
+				state * nns;
+				string nstr=svt2.idstr();
+				if(seen.find(nstr) != seen.end()){
+					nns = seen[nstr];
+				}
+				else{
+					nns = new state(cid,false,svt2);
+					st.push(nns);
+					m.states[cid] = nns;
+					seen[nstr] = nns;
+					cid++;
+				}
+				action* nact = new action(ns->id);
+				ns->actions.push_back(nact);
+				assert(ns->actions[c] ==nact);
+				ns->actions[c]->addEdge(ns->id,nns->id,1.0,nns->sv.getwt(c) + extrawt);
+				ns->actions[c]->setCost();
+				nns->incoming.push_back(ns->actions[c]->edges[0]);
+			}
+		}
+		tact->setCost();
+	}
+	
+}
+string sNF = toSTR(NF);
+void buildMDP2(MDP &m){
+	map<string,state*> seen;
+	statevars1 sva1(false);//Env Type
+	//sva1.genEnvInpMap();//sets global eimap and simpleprobmap
+	m.states[0] = new state(0,false,sva1);//Env State
+	seen[m.states[0]->sv.idstr()] = m.states[0];
+	stack<state*> st;
+	st.push(m.states[0]);
+	int cid=1;//current state id, to be incremented everytime we create a state
+	while(!st.empty()){
+		state* cs = st.top();
+		assert(cs->sv.type == false);
+		st.pop();
+		assert(cs->actions.size() == 0);
+		action* tact = new action(cs->id);
+		cs->actions.push_back(tact);	
+		map<int, vector <bool> >::iterator it;
+		cs->sv.genEnvInpMap();
+		Assert(cs->sv.req[cs->sv.currFloor] == false, "Current Floor requests are always low");
+		Assert((int)pow(2.0,NF-cs->sv.num1s()) == eimap.size(), "Matching sizes 2^num0s");
+		//one should go for only minterms of those requests which are 0
+		for (it = eimap.begin(); it != eimap.end(); it++){
+			//int i = it->first();//it->second() is the vector
+			//for the next two states, c changes in the state after this
+			
+			statevars1 svt(true);//player type state
+			svt.setreq(it->first);
+			svt.currFloor = cs->sv.currFloor;
+			svt.phasectr = cs->sv.phasectr;
 			string chkstr= svt.idstr();
 			state *ns;
 			bool cont=false;
@@ -1707,53 +1734,48 @@ void buildMDP(MDP &m, int probabs){
 				ns = seen[chkstr];
 				cont =true;
 			}
-			if(probabs == 1)
-				cs->actions[0]->addEdge(cs->id,ns->id,p1probmap[it->first],0);//cs->sv.getwt() for the next edge
-			else 
-				cs->actions[0]->addEdge(cs->id,ns->id,p2probmap[it->first],0);//cs->sv.getwt() for the next edge
+
+			double probab=0.0;
+			if(cs->sv.phasectr == 0 || cs->sv.phasectr == 1) probab = p1probmap[it->first];
+			else probab = p2probmap[it->first];
+
+			cs->actions[0]->addEdge(cs->id,ns->id,probab,0);//cs->sv.getwt() for the next edge
 			assert(cs->actions[0]==tact);
 			ns->incoming.push_back(cs->actions[0]->edges[it->first]);
 			if(cont) continue;
 			//now we have the next Player state
 			//Try to do all possible c-changes fixing the reqs 
-			//RTODO: we can only change 1 -> 0 some req's here, this is a major point of difference from before
-			//RTODO: earlier, only one req[c] could have changed/satisfied, now multiple can be satisfied as long as none of them are consecutive
-			int num1s = svt.num1s();
-			int p2num1s = (int)pow((double)2.0,num1s);
-			svt.genSysInpMap();
-			//for each of ints from 0 to p2num1s check which bits are 1 and map them to indices from 0 to NF 
-			//if the constraint of no two consecutive being active works, then go forward and make a new env state and push it on stack 
-			//unless seen already
-			int rctr = 0;
-			f(ctr,p2num1s){
-				//svt has req and simap[ctr] has a vector of bools. 
-				//we need to see that all 1 -> 0 changes are non-consecutive
-				if(nonConsecutive(svt.req,simap[ctr])){
-					//here we can make the new env state 
-					//with the new statevars1
-					statevars1 svt2(false);//env state
-					svt2.setreqp(ctr);
-					state * nns;
-					string nstr=svt2.idstr();
-					if(seen.find(nstr) != seen.end()){
-						nns = seen[nstr];
-					}
-					else{
-						nns = new state(cid,false,svt2);
-						st.push(nns);
-						m.states[cid] = nns;
-						seen[nstr] = nns;
-						cid++;
-					}
-					action* nact = new action(ns->id);
-					ns->actions.push_back(nact);
-					assert(ns->actions[rctr] ==nact);
-					ns->actions[rctr]->addEdge(ns->id,nns->id,1.0,nns->sv.getwt());
-					ns->actions[rctr]->setCost();
-					nns->incoming.push_back(ns->actions[rctr]->edges[0]);
-					rctr++;
+			f(c,NF){
+				statevars1 svt2(svt);
+				svt2.type = false;
+				svt2.currFloor = c;
+				svt2.phasectr = (svt2.phasectr + 1)%4;//svt2.pi();//increment the phasectr
+				Assert(svt2.phasectr == (svt.phasectr +1)%4,"svt2 phasectr variation");
+				int extrawt=0;
+				if(!svt2.req[c]) extrawt = 0;
+				else extrawt = EXTRA;
+				//we chose to go to floor c, shut down r_c then
+				svt2.req[c] = false;
+				//now svt is statevars1 for next next state
+				state * nns;
+				string nstr=svt2.idstr();
+				if(seen.find(nstr) != seen.end()){
+					nns = seen[nstr];
 				}
-				else continue;
+				else{
+					nns = new state(cid,false,svt2);
+					st.push(nns);
+					m.states[cid] = nns;
+					seen[nstr] = nns;
+					cid++;
+				}
+				action* nact = new action(ns->id);
+				ns->actions.push_back(nact);
+				assert(ns->actions[c] ==nact);
+				ns->actions[c]->addEdge(ns->id,nns->id,1.0,nns->sv.getwt(c) + extrawt);
+				ns->actions[c]->setCost();
+				nns->incoming.push_back(ns->actions[c]->edges[0]);
+				Assert(ns->sv.phasectr == cs->sv.phasectr && nns->sv.phasectr == (1+ns->sv.phasectr)%4," Phasectr Variation");
 			}
 		}
 		tact->setCost();
@@ -1761,18 +1783,18 @@ void buildMDP(MDP &m, int probabs){
 	
 }
 
-string sNF = toSTR(NF) +"_" + toSTR(MDPTYPE);
-
 int main(int argc,char *argv[]){
     //Give number of floors(nf) and environment MC type - 0,1 and MP Spec Type - 0,1 
     // (i) Single State MC (ii) model 24 hours of the day - hourly strategy!
 	clock_t start = clock();
 	MDP myMDP;
 	stringstream fs;
-	string sDN= "e2_" + sNF + "_" + toSTR(MDPTYPE);
-	fs<<"_"<<sDN;
+	fs<<"_e1_"<<NF;
 	string fapp = fs.str();
-	buildMDP(myMDP,MDPTYPE);
+	string sDN;
+	if(WEIGHTED_REWARDS) sDN = "e1_" + sNF + "_true";
+	else sDN = "e1_" + sNF + "_false";
+	buildMDP2(myMDP);
 	if(DFLAG) myMDP.sanityCheck();
 	cout<<"Starting Policy Iteration"<<endl;
 	srand((unsigned int) time(NULL));
@@ -1797,9 +1819,8 @@ int main(int argc,char *argv[]){
 	clock_t end = clock();
 	double duration = ( end - start ) / (double) CLOCKS_PER_SEC;
 	ofstream finalout(("./table_" + fapp + ".txt").c_str());
-	cout<<"Num_processes"<<'\t'<< "max_states" <<'\t'<<"mdp_size"<<'\t'<<"mealy_machine_size"<<'\t'<<"value"<<'\t'<<"duration"<<endl;
-	cout<<NF<<'\t'<<mdpsize<<'\t'<<msize<<'\t'<<x<<'\t'<<duration<<endl;
-	finalout<<NF<<'\t'<<mdpsize<<'\t'<<msize<<'\t'<<x<<'\t'<<duration<<endl;
+	cout<<NF<<'\t'<<mdpsize<<'\t'<<msize<<'\t'<<(BIGC - (x/WAIT))<<'\t'<<duration<<endl;
+	finalout<<NF<<'\t'<<mdpsize<<'\t'<<msize<<'\t'<<(BIGC - (x/WAIT))<<'\t'<<duration<<endl;
 	finalout.close();
 	return 0;
 }
